@@ -254,6 +254,7 @@ void Synthesiser::emitSubroutineCode(
                 fn.setRetType("void");
                 auto relName = getRelationName(lookup("@delta_" + e.first));
                 auto relType = relationTypes.find(relName)->second;
+                fn.setNextArg("oneapi::tbb::task_group&", "tg");
                 fn.setNextArg(relType + "::t_tuple", "deltaTup");
                 fn.body() << relType << " fakeRel;\n";
                 fn.body() << "auto " << relName << " = &fakeRel;\n";
@@ -262,6 +263,7 @@ void Synthesiser::emitSubroutineCode(
             }
         }
     }
+    out << "oneapi::tbb::task_group tg;\n";
     emitCode(out, stmt);
 }
 
@@ -596,12 +598,16 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<Loop>, const Loop& loop, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
-            out << "iter = 0;\n";
-            out << "for(;;) {\n";
-            dispatch(loop.getBody(), out);
-            out << "iter++;\n";
-            out << "}\n";
-            out << "iter = 0;\n";
+            if (glb.config().has("eager-eval")) {
+                out << "tg.wait();\n";
+            } else {
+                out << "iter = 0;\n";
+                out << "for(;;) {\n";
+                dispatch(loop.getBody(), out);
+                out << "iter++;\n";
+                out << "}\n";
+                out << "iter = 0;\n";
+            }
             PRINT_END_COMMENT(out);
         }
 
