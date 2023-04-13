@@ -85,7 +85,7 @@ private:
     /** Pointer to the subroutine class currently being built */
     GenClass* currentClass = nullptr;
 
-    /** Map from a relation to rules generating that relation (in the current stratum) */
+    /** Map from a relation to rules triggered by that relation (in the current stratum) */
     std::unordered_map<std::string, std::vector<std::pair<std::string, const ram::Statement&>>>
             currentRuleMap;
 
@@ -123,7 +123,8 @@ protected:
 
     /** Generate code */
     void emitCode(std::ostream& out, const ram::Statement& stmt);
-    void emitSubroutineCode(std::ostream& out, const ram::Statement& stmt);
+    void emitSubroutineCode(std::ostream& out, const ram::Statement& stmt,
+            const std::map<std::string, std::string>& relationTypes);
 
     /** Lookup frequency counter */
     unsigned lookupFreqIdx(const std::string& txt);
@@ -154,10 +155,13 @@ protected:
     std::string convertSymbolToIdentifier(const std::string& symbol) const;
 
     /** return the set of relation names accessed/used in the statement */
-    std::set<std::string> accessedRelations(ram::Statement& stmt);
+    std::set<std::string> accessedRelations(const ram::Statement& stmt);
 
     /** return the set of User-defined functor names used in the statement */
     std::set<std::string> accessedUserDefinedFunctors(ram::Statement& stmt);
+
+    std::unordered_map<std::string, std::vector<std::pair<std::string, const ram::Statement&>>> makeRuleMap(
+            const ram::Statement& stmt);
 
 public:
     explicit Synthesiser(ram::TranslationUnit& tUnit) : translationUnit(tUnit), glb(tUnit.global()) {

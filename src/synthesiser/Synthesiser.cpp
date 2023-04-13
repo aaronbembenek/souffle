@@ -225,36 +225,41 @@ std::optional<std::size_t> Synthesiser::compileRegex(const std::string& pattern)
     }
 }
 
-std::string baseRelName(const std::string& relName) {
-    if (isPrefix("@delta_", relName)) {
-        return relName.substr(7);
-    } else if (isPrefix("@new_", relName)) {
-        return relName.substr(5);
-    }
-    return relName;
-}
-
-std::unordered_map<std::string, std::vector<std::pair<std::string, const Statement&>>> makeRuleMap(
-        const Statement& stmt) {
+std::unordered_map<std::string, std::vector<std::pair<std::string, const Statement&>>>
+Synthesiser::makeRuleMap(const Statement& stmt) {
     size_t cnt{0};
     std::unordered_map<std::string, std::vector<std::pair<std::string, const Statement&>>> m;
     visit(stmt, [&](const Loop& loop) {
         visit(loop, [&](const Query& query) {
-            auto fn = [&](const std::string& relName) {
-                std::stringstream ss;
-                ss << "rule" << cnt++;
-                m[baseRelName(relName)].emplace_back(ss.str(), query);
-            };
-            visit(query, [&](const Insert& insert) { fn(insert.getRelation()); });
-            visit(query, [&](const GuardedInsert& insert) { fn(insert.getRelation()); });
+            for (auto rel : accessedRelations(query)) {
+                if (isPrefix("@delta_", rel)) {
+                    auto relName = rel.substr(7);
+                    std::stringstream ss;
+                    ss << "rule" << cnt++;
+                    m[relName].emplace_back(ss.str(), query);
+                }
+            }
         });
     });
     return m;
 }
 
-void Synthesiser::emitSubroutineCode(std::ostream& out, const Statement& stmt) {
+void Synthesiser::emitSubroutineCode(
+        std::ostream& out, const Statement& stmt, const std::map<std::string, std::string>& relationTypes) {
     if (glb.config().has("eager-eval")) {
         currentRuleMap = makeRuleMap(stmt);
+        for (auto e : currentRuleMap) {
+            for (auto p : e.second) {
+                auto& fn = currentClass->addFunction(p.first, Private);
+                fn.setRetType("void");
+                auto relName = getRelationName(lookup("@delta_" + e.first));
+                auto relType = relationTypes.find(relName)->second;
+                fn.setNextArg(relType + "::t_tuple", "deltaTup");
+                fn.body() << "auto " << relName << " = new " << relType << "();\n";
+                fn.body() << relName << "->insert(deltaTup);\n";
+                emitCode(fn.body(), p.second);
+            }
+        }
     }
     emitCode(out, stmt);
 }
@@ -2478,7 +2483,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
     CodeEmitter(*this).dispatch(stmt, out);
 }
 
-std::set<std::string> Synthesiser::accessedRelations(Statement& stmt) {
+std::set<std::string> Synthesiser::accessedRelations(const Statement& stmt) {
     std::set<std::string> accessed;
     visit(stmt, [&](const Insert& node) { accessed.insert(node.getRelation()); });
     visit(stmt, [&](const RelationOperation& node) { accessed.insert(node.getRelation()); });
@@ -2751,7 +2756,7 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         SubroutineUsingSubstr = false;
         // emit code for subroutine
         currentClass = &gen;
-        emitSubroutineCode(run.body(), *sub.second);
+        emitSubroutineCode(run.body(), *sub.second, relationTypes);
         // issue end of subroutine
         UsingStdRegex |= SubroutineUsingStdRegex;
 
