@@ -651,6 +651,8 @@ std::vector<MainOption> getMainOptions() {
       {"dl-program", 'o', "FILE", "", false,
           "Generate C++ source code, written to <FILE>, and compile this to a "
           "binary executable (without executing it)."},
+      {"eager-eval", nextOptChar++, "", "", false,
+          "Use non-batching evaluation mode (NB: applied only if compiling)."},
       {"emit-statistics", nextOptChar++, "", "", false,
           "Enable collection of statistics for auto-scheduling"},
       {"fact-dir", 'F', "DIR", ".", false,
