@@ -255,7 +255,8 @@ void Synthesiser::emitSubroutineCode(
                 auto relName = getRelationName(lookup("@delta_" + e.first));
                 auto relType = relationTypes.find(relName)->second;
                 fn.setNextArg(relType + "::t_tuple", "deltaTup");
-                fn.body() << "auto " << relName << " = new " << relType << "();\n";
+                fn.body() << relType << " fakeRel;\n";
+                fn.body() << "auto " << relName << " = &fakeRel;\n";
                 fn.body() << relName << "->insert(deltaTup);\n";
                 emitCode(fn.body(), p.second);
             }
