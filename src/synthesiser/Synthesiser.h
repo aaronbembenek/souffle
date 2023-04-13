@@ -85,6 +85,10 @@ private:
     /** Pointer to the subroutine class currently being built */
     GenClass* currentClass = nullptr;
 
+    /** Map from a relation to rules generating that relation (in the current stratum) */
+    std::unordered_map<std::string, std::vector<std::pair<std::string, const ram::Statement&>>>
+            currentRuleMap;
+
     /** Set of packed and unpacked records arities */
     std::set<std::size_t> arities;
 
@@ -119,6 +123,7 @@ protected:
 
     /** Generate code */
     void emitCode(std::ostream& out, const ram::Statement& stmt);
+    void emitSubroutineCode(std::ostream& out, const ram::Statement& stmt);
 
     /** Lookup frequency counter */
     unsigned lookupFreqIdx(const std::string& txt);

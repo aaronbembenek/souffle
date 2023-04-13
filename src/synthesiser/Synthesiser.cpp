@@ -225,6 +225,40 @@ std::optional<std::size_t> Synthesiser::compileRegex(const std::string& pattern)
     }
 }
 
+std::string baseRelName(const std::string& relName) {
+    if (isPrefix("@delta_", relName)) {
+        return relName.substr(7);
+    } else if (isPrefix("@new_", relName)) {
+        return relName.substr(5);
+    }
+    return relName;
+}
+
+std::unordered_map<std::string, std::vector<std::pair<std::string, const Statement&>>> makeRuleMap(
+        const Statement& stmt) {
+    size_t cnt{0};
+    std::unordered_map<std::string, std::vector<std::pair<std::string, const Statement&>>> m;
+    visit(stmt, [&](const Loop& loop) {
+        visit(loop, [&](const Query& query) {
+            auto fn = [&](const std::string& relName) {
+                std::stringstream ss;
+                ss << "rule" << cnt++;
+                m[baseRelName(relName)].emplace_back(ss.str(), query);
+            };
+            visit(query, [&](const Insert& insert) { fn(insert.getRelation()); });
+            visit(query, [&](const GuardedInsert& insert) { fn(insert.getRelation()); });
+        });
+    });
+    return m;
+}
+
+void Synthesiser::emitSubroutineCode(std::ostream& out, const Statement& stmt) {
+    if (glb.config().has("eager-eval")) {
+        currentRuleMap = makeRuleMap(stmt);
+    }
+    emitCode(out, stmt);
+}
+
 void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
     class CodeEmitter : public ram::Visitor<void, Node const, std::ostream&> {
         using ram::Visitor<void, Node const, std::ostream&>::visit_;
@@ -2717,7 +2751,7 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         SubroutineUsingSubstr = false;
         // emit code for subroutine
         currentClass = &gen;
-        emitCode(run.body(), *sub.second);
+        emitSubroutineCode(run.body(), *sub.second);
         // issue end of subroutine
         UsingStdRegex |= SubroutineUsingStdRegex;
 
