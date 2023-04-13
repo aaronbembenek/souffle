@@ -1803,8 +1803,28 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 << "}};\n";
 
             // insert tuple
-            out << relName << "->"
-                << "insert(tuple," << ctxName << ");\n";
+            auto ramName = insert.getRelation();
+            std::string baseName = ramName;
+            if (isPrefix("@delta_", ramName)) {
+                baseName = ramName.substr(7);
+            } else if (isPrefix("@new_", ramName)) {
+                baseName = ramName.substr(5);
+            }
+            if (glb.config().has("eager-eval") && ramName != baseName) {
+                out << "if (" << synthesiser.getRelationName(synthesiser.lookup(baseName))
+                    << "->insert(";
+                if (!rel->isNullary()) {
+                    out << "tuple";
+                }
+                out << ")) {\n";
+                for (auto p: synthesiser.currentRuleMap[baseName]) {
+                    out << "tg.run([&] { " << p.first << "(tg, tuple); });\n";
+                }
+                out << "}\n";
+            } else {
+                out << relName << "->"
+                    << "insert(tuple," << ctxName << ");\n";
+            }
 
             PRINT_END_COMMENT(out);
         }
