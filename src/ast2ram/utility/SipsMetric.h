@@ -159,6 +159,16 @@ protected:
             const std::vector<std::string>& atomNames) const override;
 };
 
+/** Prioritise delta, and then left-most */
+class DeltaSips : public StaticSipsMetric {
+public:
+    DeltaSips(const TranslationUnit& tu) : StaticSipsMetric(tu) {}
+
+protected:
+    std::vector<double> evaluateCosts(const std::vector<Atom*> atoms, const BindingStore& bindingStore,
+                                      const std::vector<std::string>& atomNames) const override;
+};
+
 /** Goal: prioritise max ratio of bound args */
 class MaxRatioSips : public StaticSipsMetric {
 public:

@@ -309,9 +309,12 @@ std::vector<std::size_t> SelingerProfileSipsMetric::getReordering(
 
 /** Create a SIPS metric based on a given heuristic. */
 std::unique_ptr<SipsMetric> SipsMetric::create(const std::string& heuristic, const TranslationUnit& tu) {
-    if (tu.global().config().has("auto-schedule")) {
+    if (tu.global().config().has("eager-eval")) {
+        return mk<DeltaSips>(tu);
+    } else if (tu.global().config().has("auto-schedule")) {
         return mk<SelingerProfileSipsMetric>(tu);
-    } else if (heuristic == "strict")
+    }
+    else if (heuristic == "strict")
         return mk<StrictSips>(tu);
     else if (heuristic == "all-bound")
         return mk<AllBoundSips>(tu);
@@ -531,6 +534,24 @@ std::vector<double> DeltaMaxBoundSips::evaluateCosts(const std::vector<Atom*> at
         } else {
             // Between 2 and 3, decreasing with more num bound
             cost.push_back(2.0 + (1.0 / (double)numBound));
+        }
+    }
+    assert(atoms.size() == cost.size() && "each atom should have exactly one cost");
+    return cost;
+}
+
+std::vector<double> DeltaSips::evaluateCosts(const std::vector<Atom*> atoms,
+                                             const BindingStore& /* bindingStore */, const std::vector<std::string>& atomNames) const {
+    std::vector<double> cost;
+    for (std::size_t i = 0; i < atoms.size(); ++i) {
+        const auto* atom = atoms[i];
+        if (atom == nullptr) {
+            cost.push_back(std::numeric_limits<double>::max());
+        } else if (isPrefix("@delta_", atomNames[i])) {
+            // Better than any other atom
+            cost.push_back(0);
+        } else {
+            cost.push_back(1);
         }
     }
     assert(atoms.size() == cost.size() && "each atom should have exactly one cost");
