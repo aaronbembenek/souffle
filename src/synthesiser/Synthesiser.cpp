@@ -2516,6 +2516,11 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         db.addGlobalInclude("\"souffle/profile/ProfileEvent.h\"");
     }
 
+    if (glb.config().has("eager-eval")) {
+        db.addGlobalInclude("<oneapi/tbb/task_arena.h>");
+        db.addGlobalInclude("<oneapi/tbb/task_group.h>");
+    }
+
     if (glb.config().has("generate-namespace")) {
         db.setNS(glb.config().get("generate-namespace"));
     } else {
