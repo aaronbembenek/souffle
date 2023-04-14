@@ -513,7 +513,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 }
             }
 
-            if (isParallel) {
+            if (isParallel && !glb.config().has("eager-eval")) {
                 out << "PARALLEL_END\n";  // end parallel
             }
 
@@ -727,10 +727,14 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             PRINT_BEGIN_COMMENT(out);
 
-            out << "auto part = " << relName << "->partition();\n";
-            out << "PARALLEL_START\n";
-            out << preamble.str();
-            out << R"cpp(
+            if (glb.config().has("eager-eval")) {
+                out << preamble.str();
+                out << "auto it = " << relName << ";\n";
+            } else {
+                out << "auto part = " << relName << "->partition();\n";
+                out << "PARALLEL_START\n";
+                out << preamble.str();
+                out << R"cpp(
                    #if defined _OPENMP && _OPENMP < 200805
                            auto count = std::distance(part.begin(), part.end());
                            auto base = part.begin();
@@ -740,6 +744,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                            pfor(auto it = part.begin(); it < part.end(); it++) {
                    #endif
                    )cpp";
+            }
             out << "try{\n";
             out << "for(const auto& env0 : *it) {\n";
 
@@ -747,7 +752,9 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             out << "}\n";
             out << "} catch(std::exception &e) { signalHandler->error(e.what());}\n";
-            out << "}\n";
+            if (!glb.config().has("eager-eval")) {
+                out << "}\n";
+            }
 
             PRINT_END_COMMENT(out);
         }
