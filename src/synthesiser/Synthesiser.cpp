@@ -262,8 +262,8 @@ void Synthesiser::emitSubroutineCode(
                 emitCode(fn.body(), p.second);
             }
         }
+        out << "oneapi::tbb::task_group tg;\n";
     }
-    out << "oneapi::tbb::task_group tg;\n";
     emitCode(out, stmt);
 }
 
@@ -1810,7 +1810,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             } else if (isPrefix("@new_", ramName)) {
                 baseName = ramName.substr(5);
             }
-            if (glb.config().has("eager-eval") && ramName != baseName) {
+            if (glb.config().has("eager-eval")) {
                 out << "if (" << synthesiser.getRelationName(synthesiser.lookup(baseName))
                     << "->insert(";
                 if (!rel->isNullary()) {
@@ -2583,7 +2583,6 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
     }
 
     if (glb.config().has("eager-eval")) {
-        db.addGlobalInclude("<oneapi/tbb/task_arena.h>");
         db.addGlobalInclude("<oneapi/tbb/task_group.h>");
     }
 
