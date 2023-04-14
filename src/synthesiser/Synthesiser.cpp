@@ -1818,7 +1818,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 }
                 out << ")) {\n";
                 for (auto p: synthesiser.currentRuleMap[baseName]) {
-                    out << "tg.run([&] { " << p.first << "(tg, tuple); });\n";
+                    out << "tg.run([&, tuple] { " << p.first << "(tg, tuple); });\n";
                 }
                 out << "}\n";
             } else {
