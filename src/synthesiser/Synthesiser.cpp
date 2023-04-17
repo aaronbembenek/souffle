@@ -2603,8 +2603,9 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
     }
 
     if (glb.config().has("eager-eval")) {
-        db.addGlobalInclude("<oneapi/tbb/task_group.h>");
         db.addGlobalInclude("<oneapi/tbb/global_control.h>");
+        db.addGlobalInclude("<oneapi/tbb/info.h>");
+        db.addGlobalInclude("<oneapi/tbb/task_group.h>");
     }
 
     if (glb.config().has("generate-namespace")) {
@@ -3009,10 +3010,10 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
     signalHandler->set();
 )_";
     if (glb.config().has("eager-eval")) {
-        runFunction.body() << "if (0 < getNumThreads()) { "
-                              "oneapi::tbb::global_control("
-                              "oneapi::tbb::global_control::max_allowed_parallelism, "
-                              "getNumThreads()); }\n";
+        runFunction.body() << "auto parallelism = getNumThreads();\n"
+                              "if (!parallelism) { parallelism = oneapi::tbb::info::default_concurrency(); }\n"
+                              "oneapi::tbb::global_control global_limit("
+                              "oneapi::tbb::global_control::max_allowed_parallelism, parallelism);\n";
     }
     if (glb.config().has("verbose")) {
         runFunction.body() << "signalHandler->enableLogging();\n";
