@@ -436,8 +436,23 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             PRINT_END_COMMENT(out);
         }
 
+        bool insertsIntoDelta(const Statement& stmt) {
+            bool yes = false;
+            visit(stmt, [&](const Insert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
+            visit(stmt, [&](const GuardedInsert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
+            return yes;
+        }
+
         void visit_(type_identity<Query>, const Query& query, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
+
+            if (glb.config().has("eager-eval") && insertsIntoDelta(query)) {
+                // Do not generate any code where we insert directly into delta relations. In Souffle's
+                // default strategy, non-recursive rules result in two queries: one that inserts into the
+                // "normal" relation, and one that inserts into the delta relation. We keep just the former.
+                PRINT_END_COMMENT(out);
+                return;
+            }
 
             // split terms of conditions of outer filter operation
             // into terms that require a context and terms that
@@ -1810,21 +1825,19 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 << "}};\n";
 
             // insert tuple
-            auto ramName = insert.getRelation();
-            std::string baseName = ramName;
-            if (isPrefix("@delta_", ramName)) {
-                baseName = ramName.substr(7);
-            } else if (isPrefix("@new_", ramName)) {
-                baseName = ramName.substr(5);
-            }
             if (glb.config().has("eager-eval")) {
-                out << "if (" << synthesiser.getRelationName(synthesiser.lookup(baseName))
-                    << "->insert(";
+                auto ramName = insert.getRelation();
+                std::string baseName = ramName;
+                assert(!isPrefix("@delta_", ramName));
+                if (isPrefix("@new_", ramName)) {
+                    baseName = ramName.substr(5);
+                }
+                out << "if (" << synthesiser.getRelationName(synthesiser.lookup(baseName)) << "->insert(";
                 if (!rel->isNullary()) {
                     out << "tuple";
                 }
                 out << ")) {\n";
-                for (auto p: synthesiser.currentRuleMap[baseName]) {
+                for (auto p : synthesiser.currentRuleMap[baseName]) {
                     out << "tg.run([&, tuple] { " << p.first << "(tg, tuple); });\n";
                 }
                 out << "}\n";
