@@ -578,6 +578,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
         }
 
         void visit_(type_identity<Parallel>, const Parallel& parallel, std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "Parallel");
+
             PRINT_BEGIN_COMMENT(out);
             auto stmts = parallel.getStatements();
 
@@ -638,6 +640,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
         }
 
         void visit_(type_identity<MergeExtend>, const MergeExtend& extend, std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "MergeExtend");
+
             PRINT_BEGIN_COMMENT(out);
             out << synthesiser.getRelationName(synthesiser.lookup(extend.getSourceRelation())) << "->"
                 << "extendAndInsert("
@@ -647,6 +651,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
         }
 
         void visit_(type_identity<Exit>, const Exit& exit, std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "Exit");
+
             PRINT_BEGIN_COMMENT(out);
             out << "if(";
             dispatch(exit.getCondition(), out);
@@ -821,6 +827,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIfExists>, const ParallelIfExists& pifexists,
                 std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "ParallelIfExists");
+
             const auto* rel = synthesiser.lookup(pifexists.getRelation());
             auto relName = synthesiser.getRelationName(rel);
 
@@ -1008,6 +1016,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIndexScan>, const ParallelIndexScan& piscan,
                 std::ostream& out) override {
+            assert(!glb.config().has(("eager-eval")) && "ParallelIndexScan");
+
             const auto* rel = synthesiser.lookup(piscan.getRelation());
             auto relName = synthesiser.getRelationName(rel);
             auto keys = isa->getSearchSignature(&piscan);
@@ -1090,6 +1100,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIndexIfExists>, const ParallelIndexIfExists& piifexists,
                 std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "ParallelIndexIfExists");
+
             PRINT_BEGIN_COMMENT(out);
             const auto* rel = synthesiser.lookup(piifexists.getRelation());
             auto relName = synthesiser.getRelationName(rel);
@@ -1317,6 +1329,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIndexAggregate>, const ParallelIndexAggregate& aggregate,
                 std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "ParallelIndexAggregate");
+
             assert(aggregate.getTupleId() == 0 && "not outer-most loop");
             assert(!preambleIssued && "only first loop can be made parallel");
             preambleIssued = true;
@@ -1582,6 +1596,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelAggregate>, const ParallelAggregate& aggregate,
                 std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "ParallelAggregate");
+
             PRINT_BEGIN_COMMENT(out);
             // get some properties
             const auto* rel = synthesiser.lookup(aggregate.getRelation());
@@ -1787,6 +1803,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<GuardedInsert>, const GuardedInsert& guardedInsert,
                 std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "GuardedInsert");
+
             PRINT_BEGIN_COMMENT(out);
             const auto* rel = synthesiser.lookup(guardedInsert.getRelation());
             auto arity = rel->getArity();
@@ -1850,6 +1868,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
         }
 
         void visit_(type_identity<Erase>, const Erase& erase, std::ostream& out) override {
+            assert(!glb.config().has("eager-eval") && "Erase");
+
             PRINT_BEGIN_COMMENT(out);
             const auto* rel = synthesiser.lookup(erase.getRelation());
             auto arity = rel->getArity();
