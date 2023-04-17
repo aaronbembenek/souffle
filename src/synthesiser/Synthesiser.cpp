@@ -1107,8 +1107,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIndexIfExists>, const ParallelIndexIfExists& piifexists,
                 std::ostream& out) override {
-            assert(!glb.config().has("eager-eval") && "ParallelIndexIfExists");
-
             PRINT_BEGIN_COMMENT(out);
             const auto* rel = synthesiser.lookup(piifexists.getRelation());
             auto relName = synthesiser.getRelationName(rel);
@@ -1120,6 +1118,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             assert(0 < rel->getArity() && "AstToRamTranslator failed");
             assert(!preambleIssued && "only first loop can be made parallel");
             preambleIssued = true;
+
+            if (glb.config().has("eager-eval")) {
+                out << preamble.str();
+                visit_(type_identity<IndexIfExists>(), piifexists, out);
+                return;
+            }
 
             PRINT_BEGIN_COMMENT(out);
             auto rangeBounds = getPaddedRangeBounds(*rel, rangePatternLower, rangePatternUpper);
