@@ -746,16 +746,18 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             assert(!preambleIssued && "only first loop can be made parallel");
             preambleIssued = true;
 
-            PRINT_BEGIN_COMMENT(out);
-
             if (glb.config().has("eager-eval")) {
                 out << preamble.str();
-                out << "auto it = " << relName << ";\n";
-            } else {
-                out << "auto part = " << relName << "->partition();\n";
-                out << "PARALLEL_START\n";
-                out << preamble.str();
-                out << R"cpp(
+                visit_(type_identity<Scan>(), pscan, out);
+                return;
+            }
+
+            PRINT_BEGIN_COMMENT(out);
+
+            out << "auto part = " << relName << "->partition();\n";
+            out << "PARALLEL_START\n";
+            out << preamble.str();
+            out << R"cpp(
                    #if defined _OPENMP && _OPENMP < 200805
                            auto count = std::distance(part.begin(), part.end());
                            auto base = part.begin();
@@ -765,7 +767,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                            pfor(auto it = part.begin(); it < part.end(); it++) {
                    #endif
                    )cpp";
-            }
             out << "try{\n";
             out << "for(const auto& env0 : *it) {\n";
 
@@ -773,9 +774,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             out << "}\n";
             out << "} catch(std::exception &e) { signalHandler->error(e.what());}\n";
-            if (!glb.config().has("eager-eval")) {
-                out << "}\n";
-            }
+            out << "}\n";
 
             PRINT_END_COMMENT(out);
         }
@@ -827,8 +826,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIfExists>, const ParallelIfExists& pifexists,
                 std::ostream& out) override {
-            assert(!glb.config().has("eager-eval") && "ParallelIfExists");
-
             const auto* rel = synthesiser.lookup(pifexists.getRelation());
             auto relName = synthesiser.getRelationName(rel);
 
@@ -838,6 +835,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             assert(!preambleIssued && "only first loop can be made parallel");
             preambleIssued = true;
+
+            if (glb.config().has("eager-eval")) {
+                out << preamble.str();
+                visit_(type_identity<IfExists>(), pifexists, out);
+                return;
+            }
 
             PRINT_BEGIN_COMMENT(out);
 
@@ -1016,8 +1019,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<ParallelIndexScan>, const ParallelIndexScan& piscan,
                 std::ostream& out) override {
-            assert(!glb.config().has(("eager-eval")) && "ParallelIndexScan");
-
             const auto* rel = synthesiser.lookup(piscan.getRelation());
             auto relName = synthesiser.getRelationName(rel);
             auto keys = isa->getSearchSignature(&piscan);
@@ -1031,6 +1032,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             assert(!preambleIssued && "only first loop can be made parallel");
             preambleIssued = true;
+
+            if (glb.config().has("eager-eval")) {
+                out << preamble.str();
+                visit_(type_identity<IndexScan>(), piscan, out);
+                return;
+            }
 
             PRINT_BEGIN_COMMENT(out);
             auto rangeBounds = getPaddedRangeBounds(*rel, rangePatternLower, rangePatternUpper);
