@@ -41,7 +41,7 @@ public:
         return insert(k, h);
     }
 
-    bool insert(const Key& k, operation_hints& h) {
+    bool insert(const Key& k, operation_hints& /* h */) {
         return inner.emplace(k).second;
     }
 
@@ -50,7 +50,7 @@ public:
         return contains(k, h);
     }
 
-    bool contains(const Key& k, operation_hints& h) const {
+    bool contains(const Key& k, operation_hints& /* h */) const {
         return inner.contains(k);
     }
 
@@ -59,7 +59,7 @@ public:
         return find(k, h);
     }
 
-    iterator find(const Key& k, operation_hints& h) const {
+    iterator find(const Key& k, operation_hints& /* h */) const {
         return inner.find(k);
     }
 
@@ -68,7 +68,7 @@ public:
         return lower_bound(k, hints);
     }
 
-    iterator lower_bound(const Key& k, operation_hints& h) const {
+    iterator lower_bound(const Key& k, operation_hints& /* h */) const {
         return inner.lower_bound(k);
     }
 
@@ -77,7 +77,7 @@ public:
         return upper_bound(k, hints);
     }
 
-    iterator upper_bound(const Key& k, operation_hints& h) const {
+    iterator upper_bound(const Key& k, operation_hints& /* h */) const {
         return inner.upper_bound(k);
     }
 
@@ -98,7 +98,7 @@ public:
     using size_type = std::size_t;
     using chunk = range<iterator>;
 
-    std::vector<chunk> getChunks(size_type num) const {
+    std::vector<chunk> getChunks(size_type /* num */) const {
         assert(false && "should never get chunks during eager evaluation");
         return {};
     }
