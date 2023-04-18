@@ -6,6 +6,7 @@
  * - <souffle root>/licenses/SOUFFLE-UPL.txt
  */
 
+#include "Global.h"
 #include "synthesiser/Relation.h"
 #include "RelationTag.h"
 #include "ram/analysis/Index.h"
@@ -45,30 +46,38 @@ std::string Relation::getTypeAttributeString(const std::vector<std::string>& att
 }
 
 Own<Relation> Relation::getSynthesiserRelation(
-        const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection) {
+        const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection, bool eagerEval) {
     Relation* rel;
 
     // Handle the qualifier in souffle code
     if (ramRel.getRepresentation() == RelationRepresentation::PROVENANCE) {
-        rel = new DirectRelation(ramRel, indexSelection, true, false);
+        assert(!eagerEval);
+        rel = new DirectRelation(ramRel, indexSelection, true, false, eagerEval);
     } else if (ramRel.isNullary()) {
         rel = new NullaryRelation(ramRel, indexSelection);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BTREE) {
-        rel = new DirectRelation(ramRel, indexSelection, false, false);
+        rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BTREE_DELETE) {
-        rel = new DirectRelation(ramRel, indexSelection, false, true);
+        assert(!eagerEval);
+        rel = new DirectRelation(ramRel, indexSelection, false, true, eagerEval);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BRIE) {
-        rel = new BrieRelation(ramRel, indexSelection);
+        if (eagerEval) {
+            rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
+        } else {
+            rel = new BrieRelation(ramRel, indexSelection);
+        }
     } else if (ramRel.getRepresentation() == RelationRepresentation::EQREL) {
+        assert(!eagerEval);
         rel = new EqrelRelation(ramRel, indexSelection);
     } else if (ramRel.getRepresentation() == RelationRepresentation::INFO) {
+        assert(!eagerEval);
         rel = new InfoRelation(ramRel, indexSelection);
     } else {
         // Handle the data structure command line flag
-        if (ramRel.getArity() > 6) {
+        if (ramRel.getArity() > 6 && !eagerEval) {
             rel = new IndirectRelation(ramRel, indexSelection);
         } else {
-            rel = new DirectRelation(ramRel, indexSelection, false, false);
+            rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
         }
     }
 
@@ -182,7 +191,9 @@ std::string DirectRelation::getTypeNamespace() {
     }
 
     std::stringstream res;
-    if (hasErase) {
+    if (eagerEval) {
+        res << "t_eager_eval_";
+    } else if (hasErase) {
         res << "t_btree_delete_";
     } else {
         res << "t_btree_";
@@ -219,7 +230,9 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
     std::ostream& def = cl.def();
 
     cl.addInclude("\"souffle/SouffleInterface.h\"");
-    if (hasErase) {
+    if (eagerEval) {
+        cl.addInclude("\"souffle/datastructure/EagerEval.h\"");
+    } else if (hasErase) {
         cl.addInclude("\"souffle/datastructure/BTreeDelete.h\"");
     } else {
         cl.addInclude("\"souffle/datastructure/BTree.h\"");
@@ -340,7 +353,9 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
                  << comparator_aux << ",updater>;\n";
         } else {
             std::string btree_name = "btree";
-            if (hasErase) {
+            if (eagerEval) {
+                btree_name = "eager_eval";
+            } else if (hasErase) {
                 btree_name = "btree_delete";
             }
             if (ind.size() == arity) {

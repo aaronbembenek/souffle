@@ -2732,8 +2732,8 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
 
     // synthesise data-structures for relations
     for (auto rel : prog.getRelations()) {
-        auto relationType =
-                Relation::getSynthesiserRelation(*rel, idxAnalysis.getIndexSelection(rel->getName()));
+        auto relationType = Relation::getSynthesiserRelation(
+                *rel, idxAnalysis.getIndexSelection(rel->getName()), glb.config().has("eager-eval"));
 
         std::string typeName = relationType->getTypeName();
         generateRelationTypeStruct(db, std::move(relationType));
@@ -2956,8 +2956,8 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         const std::string& datalogName = rel->getName();
         const std::string& cppName = getRelationName(*rel);
 
-        auto relationType =
-                Relation::getSynthesiserRelation(*rel, idxAnalysis.getIndexSelection(datalogName));
+        auto relationType = Relation::getSynthesiserRelation(
+                *rel, idxAnalysis.getIndexSelection(datalogName), glb.config().has("eager-eval"));
         const std::string& type = relationType->getTypeName();
 
         // defining table

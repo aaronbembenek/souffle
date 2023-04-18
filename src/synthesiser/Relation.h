@@ -70,7 +70,7 @@ public:
 
     /** Factory method to generate a SynthesiserRelation */
     static Own<Relation> getSynthesiserRelation(
-            const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection);
+            const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection, bool eagerEval);
 
 protected:
     /** Ram relation referred to by this */
@@ -115,8 +115,9 @@ public:
 class DirectRelation : public Relation {
 public:
     DirectRelation(const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection,
-            bool isProvenance, bool hasErase)
-            : Relation(ramRel, indexSelection), isProvenance(isProvenance), hasErase(hasErase) {}
+            bool isProvenance, bool hasErase, bool eagerEval)
+            : Relation(ramRel, indexSelection), isProvenance(isProvenance), hasErase(hasErase),
+              eagerEval(eagerEval) {}
 
     void computeIndices() override;
     std::string getTypeNamespace();
@@ -126,6 +127,7 @@ public:
 private:
     const bool isProvenance;
     const bool hasErase;
+    const bool eagerEval;
 };
 
 class IndirectRelation : public Relation {
