@@ -3,6 +3,7 @@
 #include "souffle/utility/Iteration.h"
 #include <cassert>
 #include <oneapi/tbb/concurrent_set.h>
+#include <optional>
 
 namespace souffle {
 
@@ -101,6 +102,54 @@ public:
     std::vector<chunk> getChunks(size_type /* num */) const {
         assert(false && "should never get chunks during eager evaluation");
         return {};
+    }
+
+    class slice_iterator {
+    public:
+        slice_iterator(const std::optional<iterator>& begin, const iterator& end, const Key& upperBoundIncl)
+                : curr(begin), containerEnd(end), upperBoundIncl(upperBoundIncl) {}
+
+        slice_iterator& operator++() {
+            auto& it = curr.value();
+            Comparator cmp;
+            if (++it == containerEnd || cmp(*it, upperBoundIncl) > 0) {
+                curr = {};
+            }
+            return *this;
+        }
+
+        const Key& operator*() const {
+            return *curr.value();
+        }
+
+        friend bool operator==(const slice_iterator& it1, const slice_iterator& it2) {
+            return it1.curr == it2.curr && it1.containerEnd == it2.containerEnd &&
+                   it1.upperBoundIncl == it2.upperBoundIncl;
+        }
+
+        friend bool operator!=(const slice_iterator& it1, const slice_iterator& it2) {
+            return it1.curr != it2.curr || it1.containerEnd != it2.containerEnd ||
+                   it1.upperBoundIncl != it2.upperBoundIncl;
+        }
+
+    private:
+        // invariant: curr.has_value() <--> curr.value() != containerEnd && *curr.value() <= upperBoundIncl
+        std::optional<iterator> curr;
+        iterator containerEnd;
+        const Key upperBoundIncl;
+    };
+
+    std::pair<slice_iterator, slice_iterator> slice(
+            const Key& lowerBoundIncl, const Key& upperBoundIncl) const {
+        auto start = inner.lower_bound(lowerBoundIncl);
+        auto containerEnd = inner.end();
+        slice_iterator end{{}, containerEnd, upperBoundIncl};
+        Comparator cmp;
+        if (start == containerEnd || cmp(*start, upperBoundIncl) > 0) {
+            return {end, end};
+        }
+        slice_iterator begin{{start}, containerEnd, upperBoundIncl};
+        return {begin, end};
     }
 };
 

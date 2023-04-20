@@ -502,46 +502,67 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
         auto& lexOrder = indexSelection.getLexOrder(search);
         std::size_t indNum = indexToNumMap[lexOrder];
 
-        decl << "range<t_ind_" << indNum << "::iterator> lowerUpperRange_" << search;
+        if (eagerEval) {
+            decl << "range<t_ind_" << indNum << "::slice_iterator> lowerUpperRange_" << search;
+        } else {
+            decl << "range<t_ind_" << indNum << "::iterator> lowerUpperRange_" << search;
+        }
         decl << "(const t_tuple& lower, const t_tuple& upper, context& h) const;\n";
-        def << "range<t_ind_" << indNum << "::iterator> Type::lowerUpperRange_" << search;
+        if (eagerEval) {
+            def << "range<t_ind_" << indNum << "::slice_iterator> Type::lowerUpperRange_" << search;
+        } else {
+            def << "range<t_ind_" << indNum << "::iterator> Type::lowerUpperRange_" << search;
+        }
         def << "(const t_tuple& lower, const t_tuple& upper, context& h) const {\n";
 
-        // count size of search pattern
-        std::size_t eqSize = 0;
-        for (std::size_t column = 0; column < arity; column++) {
-            if (search[column] == analysis::AttributeConstraint::Equal) {
-                eqSize++;
+        if (eagerEval) {
+            def << "auto p = ind_"  << indNum << ".slice(lower, upper);\n";
+            def << "return make_range(p.first, p.second);\n";
+        } else {
+            // count size of search pattern
+            std::size_t eqSize = 0;
+            for (std::size_t column = 0; column < arity; column++) {
+                if (search[column] == analysis::AttributeConstraint::Equal) {
+                    eqSize++;
+                }
             }
-        }
 
-        def << "t_comparator_" << indNum << " comparator;\n";
-        def << "int cmp = comparator(lower, upper);\n";
+            def << "t_comparator_" << indNum << " comparator;\n";
+            def << "int cmp = comparator(lower, upper);\n";
 
-        // if search signature is full we can apply this specialization
-        if (eqSize == arity) {
-            // use the more efficient find() method if lower == upper
-            def << "if (cmp == 0) {\n";
-            def << "    auto pos = ind_" << indNum << ".find(lower, h.hints_" << indNum << "_lower);\n";
-            def << "    auto fin = ind_" << indNum << ".end();\n";
-            def << "    if (pos != fin) {fin = pos; ++fin;}\n";
-            def << "    return make_range(pos, fin);\n";
+            // if search signature is full we can apply this specialization
+            if (eqSize == arity) {
+                // use the more efficient find() method if lower == upper
+                def << "if (cmp == 0) {\n";
+                def << "    auto pos = ind_" << indNum << ".find(lower, h.hints_" << indNum << "_lower);\n";
+                def << "    auto fin = ind_" << indNum << ".end();\n";
+                def << "    if (pos != fin) {fin = pos; ++fin;}\n";
+                def << "    return make_range(pos, fin);\n";
+                def << "}\n";
+            }
+            // if lower_bound > upper_bound then we return an empty range
+            def << "if (cmp > 0) {\n";
+            def << "    return make_range(ind_" << indNum << ".end(), ind_" << indNum << ".end());\n";
             def << "}\n";
+            // otherwise use the general method
+            def << "return make_range(ind_" << indNum << ".lower_bound(lower, h.hints_" << indNum << "_lower"
+                << "), ind_" << indNum << ".upper_bound(upper, h.hints_" << indNum << "_upper"
+                << "));\n";
         }
-        // if lower_bound > upper_bound then we return an empty range
-        def << "if (cmp > 0) {\n";
-        def << "    return make_range(ind_" << indNum << ".end(), ind_" << indNum << ".end());\n";
-        def << "}\n";
-        // otherwise use the general method
-        def << "return make_range(ind_" << indNum << ".lower_bound(lower, h.hints_" << indNum << "_lower"
-            << "), ind_" << indNum << ".upper_bound(upper, h.hints_" << indNum << "_upper"
-            << "));\n";
 
         def << "}\n";
 
-        decl << "range<t_ind_" << indNum << "::iterator> lowerUpperRange_" << search;
+        if (eagerEval) {
+            decl << "range<t_ind_" << indNum << "::slice_iterator> lowerUpperRange_" << search;
+        } else {
+            decl << "range<t_ind_" << indNum << "::iterator> lowerUpperRange_" << search;
+        }
         decl << "(const t_tuple& lower, const t_tuple& upper) const;\n";
-        def << "range<t_ind_" << indNum << "::iterator> Type::lowerUpperRange_" << search;
+        if (eagerEval) {
+            def << "range<t_ind_" << indNum << "::slice_iterator> Type::lowerUpperRange_" << search;
+        } else {
+            def << "range<t_ind_" << indNum << "::iterator> Type::lowerUpperRange_" << search;
+        }
         def << "(const t_tuple& lower, const t_tuple& upper) const {\n";
 
         def << "context h;\n";
