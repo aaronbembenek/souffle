@@ -1789,7 +1789,15 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
         void visit_(type_identity<Filter>, const Filter& filter, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
             out << "if( ";
-            dispatch(filter.getCondition(), out);
+            if (glb.config().has("eager-eval")) {
+                std::string targetRel;
+                visit(filter, [&](const Insert& op) { targetRel = op.getRelation(); });
+                assert(!targetRel.empty());
+                auto filtered = filterCondition(filter.getCondition(), baseRelationName(targetRel));
+                dispatch(*filtered, out);
+            } else {
+                dispatch(filter.getCondition(), out);
+            }
             out << ") {\n";
             visit_(type_identity<NestedOperation>(), filter, out);
             out << "}\n";
@@ -1849,11 +1857,8 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             // insert tuple
             if (glb.config().has("eager-eval")) {
                 auto ramName = insert.getRelation();
-                std::string baseName = ramName;
                 assert(!isPrefix("@delta_", ramName));
-                if (isPrefix("@new_", ramName)) {
-                    baseName = ramName.substr(5);
-                }
+                std::string baseName = baseRelationName(ramName);
                 out << "if (" << synthesiser.getRelationName(synthesiser.lookup(baseName)) << "->insert(";
                 if (!rel->isNullary()) {
                     out << "tuple";
@@ -2586,11 +2591,24 @@ std::set<std::string> Synthesiser::accessedUserDefinedFunctors(Statement& stmt) 
     return accessed;
 };
 
-std::string baseName(const std::string& relName) {
-    if (isPrefix("@new_", relName)) {
-        return relName.substr(5);
+Own<ram::Condition> Synthesiser::filterCondition(
+        const ram::Condition& condition, const std::string& targetRel) {
+    VecOwn<Condition> conjunctions;
+    for (auto conj : findConjunctiveTerms(&condition)) {
+        if (conj == nullptr) {
+            continue;
+        }
+        if (const auto* neg = as<Negation>(conj)) {
+            if (const auto* exists = as<ExistenceCheck>(neg->getOperand())) {
+                auto& relName = exists->getRelation();
+                if (relName == targetRel || isPrefix("@delta_", relName)) {
+                    continue;
+                }
+            }
+        }
+        conjunctions.push_back(clone(conj));
     }
-    return relName;
+    return toCondition(conjunctions);
 }
 
 void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis::IndexAnalysis& idxAnalysis,
@@ -2599,12 +2617,13 @@ void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis:
     std::unordered_set<std::string> preds;
     visit(subroutine, [&](const Insert& op) {
         if (!isPrefix("@delta_", op.getRelation())) {
-            preds.emplace(baseName(op.getRelation()));
+            preds.emplace(baseRelationName(op.getRelation()));
         }
     });
 
     // See which indices of these relations are read in rules. This ignores delta occurrences.
-    visit(subroutine, [&](const Query& query) {
+    visit(subroutine, [&](const DebugInfo& debug) {
+        auto& query = debug.getStatement();
         // Ignore queries that insert directly into delta relations (we don't generate code for these).
         if (insertsIntoDelta(query)) {
             return;
@@ -2614,6 +2633,7 @@ void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis:
                 info[op.getRelation()].master = true;
             }
         });
+        // FIXME We need to also check the conditions of IfExists and IndexIfExists
         visit(query, [&](const IfExists& op) {
             if (preds.count(op.getRelation())) {
                 info[op.getRelation()].master = true;
@@ -2623,6 +2643,15 @@ void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis:
             if (preds.count(op.getRelation())) {
                 info[op.getRelation()].searches.emplace(idxAnalysis.getSearchSignature(&op));
             }
+        });
+        visit(query, [&](const Filter& op) {
+            auto relName = baseRelationName(getInsertRelation(query));
+            auto filtered = filterCondition(op.getCondition(), relName);
+            visit(filtered, [&](const ExistenceCheck& ex) {
+                if (preds.count(ex.getRelation())) {
+                    info[ex.getRelation()].master = true;
+                }
+            });
         });
     });
 }

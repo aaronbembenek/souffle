@@ -152,13 +152,33 @@ protected:
         }
     }
 
+    static Own<ram::Condition> filterCondition(const ram::Condition& condition, const std::string& targetRel);
+
+    static std::string getInsertRelation(const ram::Statement& stmt) {
+        std::string tgt;
+        visit(stmt, [&](const ram::Insert& insert) {
+            assert(tgt.empty());
+            tgt = insert.getRelation();
+        });
+        return tgt;
+    }
+
+    static std::string baseRelationName(const std::string& relName) {
+        if (isPrefix("@new_", relName)) {
+            return relName.substr(5);
+        }
+        return relName;
+    }
+
+
     static bool insertsIntoDelta(const ram::Statement& stmt) {
         bool yes = false;
         visit(stmt, [&](const ram::Insert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
         return yes;
     }
 
-    void getIndexInfo(const ram::Statement* subroutine, const ram::analysis::IndexAnalysis& idxAnalysis,
+    static void getIndexInfo(const ram::Statement* subroutine,
+            const ram::analysis::IndexAnalysis& idxAnalysis,
             std::unordered_map<std::string, IndexInfo>& info);
 
     std::string convertSymbolToIdentifier(const std::string& symbol) const;
