@@ -2614,6 +2614,11 @@ void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis:
                 info[op.getRelation()].master = true;
             }
         });
+        visit(query, [&](const IfExists& op) {
+            if (preds.count(op.getRelation())) {
+                info[op.getRelation()].master = true;
+            }
+        });
         visit(query, [&](const IndexOperation& op) {
             if (preds.count(op.getRelation())) {
                 info[op.getRelation()].searches.emplace(idxAnalysis.getSearchSignature(&op));
