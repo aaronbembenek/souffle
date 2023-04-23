@@ -45,24 +45,24 @@ std::string Relation::getTypeAttributeString(const std::vector<std::string>& att
     return type.str();
 }
 
-Own<Relation> Relation::getSynthesiserRelation(
-        const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection, bool eagerEval) {
+Own<Relation> Relation::getSynthesiserRelation(const ram::Relation& ramRel,
+        const ram::analysis::IndexCluster& indexSelection, const IndexInfo& indexInfo, bool eagerEval) {
     Relation* rel;
 
     // Handle the qualifier in souffle code
     if (ramRel.getRepresentation() == RelationRepresentation::PROVENANCE) {
         assert(!eagerEval);
-        rel = new DirectRelation(ramRel, indexSelection, true, false, eagerEval);
+        rel = new DirectRelation(ramRel, indexSelection, true, false, indexInfo);
     } else if (ramRel.isNullary()) {
         rel = new NullaryRelation(ramRel, indexSelection);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BTREE) {
-        rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
+        rel = new DirectRelation(ramRel, indexSelection, false, false, indexInfo);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BTREE_DELETE) {
         assert(!eagerEval);
-        rel = new DirectRelation(ramRel, indexSelection, false, true, eagerEval);
+        rel = new DirectRelation(ramRel, indexSelection, false, true, indexInfo);
     } else if (ramRel.getRepresentation() == RelationRepresentation::BRIE) {
         if (eagerEval) {
-            rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
+            rel = new DirectRelation(ramRel, indexSelection, false, false, indexInfo);
         } else {
             rel = new BrieRelation(ramRel, indexSelection);
         }
@@ -77,7 +77,7 @@ Own<Relation> Relation::getSynthesiserRelation(
         if (ramRel.getArity() > 6 && !eagerEval) {
             rel = new IndirectRelation(ramRel, indexSelection);
         } else {
-            rel = new DirectRelation(ramRel, indexSelection, false, false, eagerEval);
+            rel = new DirectRelation(ramRel, indexSelection, false, false, indexInfo);
         }
     }
 
@@ -191,9 +191,7 @@ std::string DirectRelation::getTypeNamespace() {
     }
 
     std::stringstream res;
-    if (eagerEval) {
-        res << "t_eager_eval_";
-    } else if (hasErase) {
+    if (hasErase) {
         res << "t_btree_delete_";
     } else {
         res << "t_btree_";
@@ -230,12 +228,11 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
     std::ostream& def = cl.def();
 
     cl.addInclude("\"souffle/SouffleInterface.h\"");
-    if (eagerEval) {
-        cl.addInclude("\"souffle/datastructure/EagerEval.h\"");
-    } else if (hasErase) {
+    if (hasErase) {
         cl.addInclude("\"souffle/datastructure/BTreeDelete.h\"");
     } else {
         cl.addInclude("\"souffle/datastructure/BTree.h\"");
+        cl.addInclude("\"souffle/datastructure/EagerEval.h\"");
     }
 
     // struct definition
@@ -256,6 +253,15 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
 
         decl << "}\n";
         decl << "};\n";
+    }
+
+    // compute which indices need to be stored using an `eager_eval` data structure
+    std::set<std::size_t> eagerEvalPositions;
+    if (indexInfo.master) {
+        eagerEvalPositions.emplace(masterIndex);
+    }
+    for (auto &search: indexInfo.searches) {
+        eagerEvalPositions.emplace(indexSelection.getLexOrderNum(search));
     }
 
     // generate the btree type for each relation
@@ -353,7 +359,7 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
                  << comparator_aux << ",updater>;\n";
         } else {
             std::string btree_name = "btree";
-            if (eagerEval) {
+            if (eagerEvalPositions.count(i)) {
                 btree_name = "eager_eval";
             } else if (hasErase) {
                 btree_name = "btree_delete";
@@ -501,6 +507,7 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
     for (auto search : indexSelection.getSearches()) {
         auto& lexOrder = indexSelection.getLexOrder(search);
         std::size_t indNum = indexToNumMap[lexOrder];
+        bool eagerEval = eagerEvalPositions.count(indexSelection.getLexOrderNum(search));
 
         if (eagerEval) {
             decl << "range<t_ind_" << indNum << "::slice_iterator> lowerUpperRange_" << search;

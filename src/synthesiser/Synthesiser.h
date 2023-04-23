@@ -152,6 +152,15 @@ protected:
         }
     }
 
+    static bool insertsIntoDelta(const ram::Statement& stmt) {
+        bool yes = false;
+        visit(stmt, [&](const ram::Insert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
+        return yes;
+    }
+
+    void getIndexInfo(const ram::Statement* subroutine, const ram::analysis::IndexAnalysis& idxAnalysis,
+            std::unordered_map<std::string, IndexInfo>& info);
+
     std::string convertSymbolToIdentifier(const std::string& symbol) const;
 
     /** return the set of relation names accessed/used in the statement */

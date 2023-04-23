@@ -22,6 +22,11 @@
 
 namespace souffle::synthesiser {
 
+struct IndexInfo {
+    bool master;
+    std::unordered_set<ram::analysis::SearchSignature, ram::analysis::SearchSignature::Hasher> searches;
+};
+
 class Relation {
 public:
     Relation(const ram::Relation& rel, const ram::analysis::IndexCluster& indexSelection)
@@ -69,8 +74,8 @@ public:
     virtual void generateTypeStruct(GenDb& db) = 0;
 
     /** Factory method to generate a SynthesiserRelation */
-    static Own<Relation> getSynthesiserRelation(
-            const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection, bool eagerEval);
+    static Own<Relation> getSynthesiserRelation(const ram::Relation& ramRel,
+            const ram::analysis::IndexCluster& indexSelection, const IndexInfo& indexInfo, bool eagerEval);
 
 protected:
     /** Ram relation referred to by this */
@@ -115,9 +120,9 @@ public:
 class DirectRelation : public Relation {
 public:
     DirectRelation(const ram::Relation& ramRel, const ram::analysis::IndexCluster& indexSelection,
-            bool isProvenance, bool hasErase, bool eagerEval)
+            bool isProvenance, bool hasErase, const IndexInfo& indexInfo)
             : Relation(ramRel, indexSelection), isProvenance(isProvenance), hasErase(hasErase),
-              eagerEval(eagerEval) {}
+              indexInfo(indexInfo) {}
 
     void computeIndices() override;
     std::string getTypeNamespace();
@@ -127,7 +132,7 @@ public:
 private:
     const bool isProvenance;
     const bool hasErase;
-    const bool eagerEval;
+    IndexInfo indexInfo;
 };
 
 class IndirectRelation : public Relation {

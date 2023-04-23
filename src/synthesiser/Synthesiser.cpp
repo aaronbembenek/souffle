@@ -436,13 +436,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             PRINT_END_COMMENT(out);
         }
 
-        bool insertsIntoDelta(const Statement& stmt) {
-            bool yes = false;
-            visit(stmt, [&](const Insert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
-            visit(stmt, [&](const GuardedInsert& insert) { yes |= isPrefix("@delta_", insert.getRelation()); });
-            return yes;
-        }
-
         void visit_(type_identity<Query>, const Query& query, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
 
@@ -2593,6 +2586,42 @@ std::set<std::string> Synthesiser::accessedUserDefinedFunctors(Statement& stmt) 
     return accessed;
 };
 
+std::string baseName(const std::string& relName) {
+    if (isPrefix("@new_", relName)) {
+        return relName.substr(5);
+    }
+    return relName;
+}
+
+void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis::IndexAnalysis& idxAnalysis,
+        std::unordered_map<std::string, IndexInfo>& info) {
+    // Get all the relations defined in the current stratum
+    std::unordered_set<std::string> preds;
+    visit(subroutine, [&](const Insert& op) {
+        if (!isPrefix("@delta_", op.getRelation())) {
+            preds.emplace(baseName(op.getRelation()));
+        }
+    });
+
+    // See which indices of these relations are read in rules. This ignores delta occurrences.
+    visit(subroutine, [&](const Query& query) {
+        // Ignore queries that insert directly into delta relations (we don't generate code for these).
+        if (insertsIntoDelta(query)) {
+            return;
+        }
+        visit(query, [&](const Scan& op) {
+            if (preds.count(op.getRelation())) {
+                info[op.getRelation()].master = true;
+            }
+        });
+        visit(query, [&](const IndexOperation& op) {
+            if (preds.count(op.getRelation())) {
+                info[op.getRelation()].searches.emplace(idxAnalysis.getSearchSignature(&op));
+            }
+        });
+    });
+}
+
 void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withSharedLibrary) {
     // ---------------------------------------------------------------
     //                      Auto-Index Generation
@@ -2730,10 +2759,19 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
 
     std::map<std::string, std::string> relationTypes;
 
+    // figure out which data structures to use, for eager eval
+    std::unordered_map<std::string, IndexInfo> indexInfo;
+    if (glb.config().has("eager-eval")) {
+        for (auto& sub : prog.getSubroutines()) {
+            getIndexInfo(sub.second, idxAnalysis, indexInfo);
+        }
+    }
+
     // synthesise data-structures for relations
     for (auto rel : prog.getRelations()) {
-        auto relationType = Relation::getSynthesiserRelation(
-                *rel, idxAnalysis.getIndexSelection(rel->getName()), glb.config().has("eager-eval"));
+        auto relationType =
+                Relation::getSynthesiserRelation(*rel, idxAnalysis.getIndexSelection(rel->getName()),
+                        indexInfo[rel->getName()], glb.config().has("eager-eval"));
 
         std::string typeName = relationType->getTypeName();
         generateRelationTypeStruct(db, std::move(relationType));
@@ -2957,7 +2995,7 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         const std::string& cppName = getRelationName(*rel);
 
         auto relationType = Relation::getSynthesiserRelation(
-                *rel, idxAnalysis.getIndexSelection(datalogName), glb.config().has("eager-eval"));
+                *rel, idxAnalysis.getIndexSelection(datalogName), {}, glb.config().has("eager-eval"));
         const std::string& type = relationType->getTypeName();
 
         // defining table
