@@ -204,6 +204,12 @@ std::string DirectRelation::getTypeNamespace() {
 
     for (auto& search : indexSelection.getSearches()) {
         res << "__" << search;
+        if (indexInfo.searches.count(search)) {
+            res << "e";
+        }
+    }
+    if (indexInfo.master) {
+        res << "__e";
     }
 
     return res.str();
