@@ -1498,6 +1498,384 @@ public:
     }
 
     /**
+     * Inserts the given key into this tree. If successful, returns an empty option; otherwise, returns the
+     * element already present.
+     */
+    std::optional<Key> insertIfAbsent(const Key& k, operation_hints& hints) {
+#ifdef IS_PARALLEL
+
+        // special handling for inserting first element
+        while (root == nullptr) {
+            // try obtaining root-lock
+            if (!root_lock.try_start_write()) {
+                // somebody else was faster => re-check
+                continue;
+            }
+
+            // check loop condition again
+            if (root != nullptr) {
+                // somebody else was faster => normal insert
+                root_lock.end_write();
+                break;
+            }
+
+            // create new node
+            leftmost = new leaf_node();
+            leftmost->numElements = 1;
+            leftmost->keys[0] = k;
+            root = leftmost;
+
+            // operation complete => we can release the root lock
+            root_lock.end_write();
+
+            hints.last_insert.access(leftmost);
+
+            return {};
+        }
+
+        // insert using iterative implementation
+
+        node* cur = nullptr;
+
+        // test last insert hints
+        lock_type::Lease cur_lease;
+
+        auto checkHint = [&](node* last_insert) {
+            // ignore null pointer
+            if (!last_insert) return false;
+            // get a read lease on indicated node
+            auto hint_lease = last_insert->lock.start_read();
+            // check whether it covers the key
+            if (!weak_covers(last_insert, k)) return false;
+            // and if there was no concurrent modification
+            if (!last_insert->lock.validate(hint_lease)) return false;
+            // use hinted location
+            cur = last_insert;
+            // and keep lease
+            cur_lease = hint_lease;
+            // we found a hit
+            return true;
+        };
+
+        if (hints.last_insert.any(checkHint)) {
+            // register this as a hit
+            hint_stats.inserts.addHit();
+        } else {
+            // register this as a miss
+            hint_stats.inserts.addMiss();
+        }
+
+        // if there is no valid hint ..
+        if (!cur) {
+            do {
+                // get root - access lock
+                auto root_lease = root_lock.start_read();
+
+                // start with root
+                cur = root;
+
+                // get lease of the next node to be accessed
+                cur_lease = cur->lock.start_read();
+
+                // check validity of root pointer
+                if (root_lock.end_read(root_lease)) {
+                    break;
+                }
+
+            } while (true);
+        }
+
+        while (true) {
+            // handle inner nodes
+            if (cur->inner) {
+                auto a = &(cur->keys[0]);
+                auto b = &(cur->keys[cur->numElements]);
+
+                auto pos = search.lower_bound(k, a, b, weak_comp);
+                auto idx = pos - a;
+
+                // early exit for sets
+                if (isSet && pos != b && weak_equal(*pos, k)) {
+                    // validate results
+                    if (!cur->lock.validate(cur_lease)) {
+                        // start over again
+                        return insertIfAbsent(k, hints);
+                    }
+
+                    // update provenance information
+                    if (typeid(Comparator) != typeid(WeakComparator) && less(k, *pos)) {
+                        if (!cur->lock.try_upgrade_to_write(cur_lease)) {
+                            // start again
+                            return insertIfAbsent(k, hints);
+                        }
+                        update(*pos, k);
+                        cur->lock.end_write();
+                        return {};
+                    }
+
+                    // we found the element => no check of lock necessary
+                    return {*pos};
+                }
+
+                // get next pointer
+                auto next = cur->getChild(idx);
+
+                // get lease on next level
+                auto next_lease = next->lock.start_read();
+
+                // check whether there was a write
+                if (!cur->lock.end_read(cur_lease)) {
+                    // start over
+                    return insertIfAbsent(k, hints);
+                }
+
+                // go to next
+                cur = next;
+
+                // move on lease
+                cur_lease = next_lease;
+
+                continue;
+            }
+
+            // the rest is for leaf nodes
+            assert(!cur->inner);
+
+            // -- insert node in leaf node --
+
+            auto a = &(cur->keys[0]);
+            auto b = &(cur->keys[cur->numElements]);
+
+            auto pos = search.upper_bound(k, a, b, weak_comp);
+            auto idx = pos - a;
+
+            // early exit for sets
+            if (isSet && pos != a && weak_equal(*(pos - 1), k)) {
+                // validate result
+                if (!cur->lock.validate(cur_lease)) {
+                    // start over again
+                    return insertIfAbsent(k, hints);
+                }
+
+                // update provenance information
+                if (typeid(Comparator) != typeid(WeakComparator) && less(k, *(pos - 1))) {
+                    if (!cur->lock.try_upgrade_to_write(cur_lease)) {
+                        // start again
+                        return insertIfAbsent(k, hints);
+                    }
+                    update(*(pos - 1), k);
+                    cur->lock.end_write();
+                    return {};
+                }
+
+                // we found the element => done
+                return {*(pos - 1)};
+            }
+
+            // upgrade to write-permission
+            if (!cur->lock.try_upgrade_to_write(cur_lease)) {
+                // something has changed => restart
+                hints.last_insert.access(cur);
+                return insertIfAbsent(k, hints);
+            }
+
+            if (cur->numElements >= node::maxKeys) {
+                // -- lock parents --
+                auto priv = cur;
+                auto parent = priv->parent;
+                std::vector<node*> parents;
+                do {
+                    if (parent) {
+                        parent->lock.start_write();
+                        while (true) {
+                            // check whether parent is correct
+                            if (parent == priv->parent) {
+                                break;
+                            }
+                            // switch parent
+                            parent->lock.abort_write();
+                            parent = priv->parent;
+                            parent->lock.start_write();
+                        }
+                    } else {
+                        // lock root lock => since cur is root
+                        root_lock.start_write();
+                    }
+
+                    // record locked node
+                    parents.push_back(parent);
+
+                    // stop at "sphere of influence"
+                    if (!parent || !parent->isFull()) {
+                        break;
+                    }
+
+                    // go one step higher
+                    priv = parent;
+                    parent = parent->parent;
+
+                } while (true);
+
+                // split this node
+                auto old_root = root;
+                idx -= cur->rebalance_or_split(
+                        const_cast<node**>(&root), root_lock, static_cast<int>(idx), parents);
+
+                // release parent lock
+                for (auto it = parents.rbegin(); it != parents.rend(); ++it) {
+                    auto parent = *it;
+
+                    // release this lock
+                    if (parent) {
+                        parent->lock.end_write();
+                    } else {
+                        if (old_root != root) {
+                            root_lock.end_write();
+                        } else {
+                            root_lock.abort_write();
+                        }
+                    }
+                }
+
+                // insert element in right fragment
+                if (((size_type)idx) > cur->numElements) {
+                    // release current lock
+                    cur->lock.end_write();
+
+                    // insert in sibling
+                    return insertIfAbsent(k, hints);
+                }
+            }
+
+            // ok - no split necessary
+            assert(cur->numElements < node::maxKeys && "Split required!");
+
+            // move keys
+            for (int j = static_cast<int>(cur->numElements); j > static_cast<int>(idx); --j) {
+                cur->keys[j] = cur->keys[j - 1];
+            }
+
+            // insert new element
+            cur->keys[idx] = k;
+            cur->numElements++;
+
+            // release lock on current node
+            cur->lock.end_write();
+
+            // remember last insertion position
+            hints.last_insert.access(cur);
+            return {};
+        }
+
+#else
+        // special handling for inserting first element
+        if (empty()) {
+            // create new node
+            leftmost = new leaf_node();
+            leftmost->numElements = 1;
+            leftmost->keys[0] = k;
+            root = leftmost;
+
+            hints.last_insert.access(leftmost);
+
+            return {};
+        }
+
+        // insert using iterative implementation
+        node* cur = root;
+
+        auto checkHints = [&](node* last_insert) {
+            if (!last_insert) return false;
+            if (!weak_covers(last_insert, k)) return false;
+            cur = last_insert;
+            return true;
+        };
+
+        // test last insert
+        if (hints.last_insert.any(checkHints)) {
+            hint_stats.inserts.addHit();
+        } else {
+            hint_stats.inserts.addMiss();
+        }
+
+        while (true) {
+            // handle inner nodes
+            if (cur->inner) {
+                auto a = &(cur->keys[0]);
+                auto b = &(cur->keys[cur->numElements]);
+
+                auto pos = search.lower_bound(k, a, b, weak_comp);
+                auto idx = pos - a;
+
+                // early exit for sets
+                if (isSet && pos != b && weak_equal(*pos, k)) {
+                    // update provenance information
+                    if (typeid(Comparator) != typeid(WeakComparator) && less(k, *pos)) {
+                        update(*pos, k);
+                        return {};
+                    }
+
+                    return {*pos};
+                }
+
+                cur = cur->getChild(idx);
+                continue;
+            }
+
+            // the rest is for leaf nodes
+            assert(!cur->inner);
+
+            // -- insert node in leaf node --
+
+            auto a = &(cur->keys[0]);
+            auto b = &(cur->keys[cur->numElements]);
+
+            auto pos = search.upper_bound(k, a, b, weak_comp);
+            auto idx = pos - a;
+
+            // early exit for sets
+            if (isSet && pos != a && weak_equal(*(pos - 1), k)) {
+                // update provenance information
+                if (typeid(Comparator) != typeid(WeakComparator) && less(k, *(pos - 1))) {
+                    update(*(pos - 1), k);
+                    return {};
+                }
+
+                return {*(pos - 1)};
+            }
+
+            if (cur->numElements >= node::maxKeys) {
+                // split this node
+                idx -= cur->rebalance_or_split(&root, root_lock, static_cast<int>(idx));
+
+                // insert element in right fragment
+                if (((size_type)idx) > cur->numElements) {
+                    idx -= cur->numElements + 1;
+                    cur = cur->parent->getChild(cur->position + 1);
+                }
+            }
+
+            // ok - no split necessary
+            assert(cur->numElements < node::maxKeys && "Split required!");
+
+            // move keys
+            for (int j = static_cast<int>(cur->numElements); j > idx; --j) {
+                cur->keys[j] = cur->keys[j - 1];
+            }
+
+            // insert new element
+            cur->keys[idx] = k;
+            cur->numElements++;
+
+            // remember last insertion position
+            hints.last_insert.access(cur);
+
+            return {};
+        }
+#endif
+    }
+
+    /**
      * Inserts the given range of elements into this tree.
      */
     template <typename Iter>
