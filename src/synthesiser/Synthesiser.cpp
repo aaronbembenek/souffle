@@ -262,14 +262,9 @@ void Synthesiser::emitSubroutineCode(
                 emitCode(fn.body(), p.second);
             }
         }
-        out << "oneapi::tbb::task_arena arena(numThreads ? numThreads : oneapi::tbb::task_arena::automatic);";
-        out << "arena.execute([&] {\n";
         out << "oneapi::tbb::task_group tg;\n";
     }
     emitCode(out, stmt);
-    if (glb.config().has("eager-eval")) {
-        out << "});\n";
-    }
 }
 
 void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
@@ -662,7 +657,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             PRINT_BEGIN_COMMENT(out);
             out << "{\n";
             out << " std::vector<RamDomain> args, ret;\n";
-            out << synthesiser.convertStratumIdent(call.getName()) << ".run(args, ret, getNumThreads());\n";
+            out << synthesiser.convertStratumIdent(call.getName()) << ".run(args, ret);\n";
             out << "}\n";
             PRINT_END_COMMENT(out);
         }
@@ -2702,8 +2697,8 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
     }
 
     if (glb.config().has("eager-eval")) {
+        db.addGlobalInclude("<oneapi/tbb/global_control.h>");
         db.addGlobalInclude("<oneapi/tbb/info.h>");
-        db.addGlobalInclude("<oneapi/tbb/task_arena.h>");
         db.addGlobalInclude("<oneapi/tbb/task_group.h>");
     }
 
@@ -2902,7 +2897,6 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
         run.setRetType("void");
         run.setNextArg("[[maybe_unused]] const std::vector<RamDomain>&", "args");
         run.setNextArg("[[maybe_unused]] std::vector<RamDomain>&", "ret");
-        run.setNextArg("[[maybe_unused]] std::size_t", "numThreads");
 
         bool needLock = false;
         visit(*sub.second, [&](const SubroutineReturn&) { needLock = true; });
@@ -3118,6 +3112,12 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
 
     signalHandler->set();
 )_";
+    if (glb.config().has("eager-eval")) {
+        runFunction.body() << "auto parallelism = getNumThreads();\n"
+                              "if (!parallelism) { parallelism = oneapi::tbb::info::default_concurrency(); }\n"
+                              "oneapi::tbb::global_control global_limit("
+                              "oneapi::tbb::global_control::max_allowed_parallelism, parallelism);\n";
+    }
     if (glb.config().has("verbose")) {
         runFunction.body() << "signalHandler->enableLogging();\n";
     }
@@ -3318,8 +3318,7 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
 
         for (auto& sub : prog.getSubroutines()) {
             executeSubroutine.body() << "if (name == \"" << sub.first << "\") {\n"
-                                     << convertStratumIdent("stratum_" + sub.first)
-                                     << ".run(args, ret, getNumThreads());\n"
+                                     << convertStratumIdent("stratum_" + sub.first) << ".run(args, ret);\n"
                                      << "return;"
                                      << "}\n";
         }
