@@ -814,8 +814,15 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             PRINT_BEGIN_COMMENT(out);
 
-            out << "for(const auto& env" << identifier << " : "
-                << "*" << relName << ") {\n";
+            bool parallelize = glb.config().has("eager-eval");
+            if (parallelize) {
+                out << "auto part = " << relName << "->partition();\n";
+                out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
+                out << "for(const auto& env" << identifier << ": it) {\n";
+            } else {
+                out << "for(const auto& env" << identifier << " : "
+                    << "*" << relName << ") {\n";
+            }
             out << "if( ";
 
             dispatch(ifexists.getCondition(), out);
@@ -827,6 +834,9 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "break;\n";
             out << "}\n";
             out << "}\n";
+            if (parallelize) {
+                out << "});\n";
+            }
 
             PRINT_END_COMMENT(out);
         }
@@ -901,11 +911,22 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "auto range = " << relName << "->"
                 << "lowerUpperRange_" << keys << "(" << rangeBounds.first.str() << ","
                 << rangeBounds.second.str() << "," << ctxName << ");\n";
-            out << "for(const auto& env" << identifier << " : range) {\n";
+
+            bool parallelize = glb.config().has("eager-eval");
+            if (parallelize) {
+                out << "auto part = range.partition();\n";
+                out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
+                out << "for(const auto& env" << identifier << ": it) {\n";
+            } else {
+                out << "for(const auto& env" << identifier << " : range) {\n";
+            }
 
             visit_(type_identity<TupleOperation>(), iscan, out);
 
             out << "}\n";
+            if (parallelize) {
+                out << "});\n";
+            }
             PRINT_END_COMMENT(out);
         }
 
@@ -1096,7 +1117,15 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "auto range = " << relName << "->"
                 << "lowerUpperRange_" << keys << "(" << rangeBounds.first.str() << ","
                 << rangeBounds.second.str() << "," << ctxName << ");\n";
-            out << "for(const auto& env" << identifier << " : range) {\n";
+
+            bool parallelize = glb.config().has("eager-eval");
+            if (parallelize) {
+                out << "auto part = range.partition();\n";
+                out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
+                out << "for(const auto& env" << identifier << ": it) {\n";
+            } else {
+                out << "for(const auto& env" << identifier << " : range) {\n";
+            }
             out << "if( ";
 
             dispatch(iifexists.getCondition(), out);
@@ -1108,6 +1137,9 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "break;\n";
             out << "}\n";
             out << "}\n";
+            if (parallelize) {
+                out << "});\n";
+            }
 
             PRINT_END_COMMENT(out);
         }
