@@ -136,7 +136,7 @@ public:
         // invariant: curr.has_value() <--> curr.value() != containerEnd && *curr.value() <= upperBoundIncl
         std::optional<iterator> curr;
         iterator containerEnd;
-        const Key upperBoundIncl;
+        Key upperBoundIncl;
     };
 
     std::pair<slice_iterator, slice_iterator> slice(
