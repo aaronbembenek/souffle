@@ -96,14 +96,6 @@ public:
 
     void printStats(std::ostream& /* o */) const {}
 
-    using size_type = std::size_t;
-    using chunk = range<iterator>;
-
-    std::vector<chunk> getChunks(size_type /* num */) const {
-        assert(false && "should never get chunks during eager evaluation");
-        return {};
-    }
-
     class slice_iterator {
     public:
         slice_iterator(const std::optional<iterator>& begin, const iterator& end, const Key& upperBoundIncl)

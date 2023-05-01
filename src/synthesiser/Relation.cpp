@@ -592,7 +592,12 @@ void DirectRelation::generateTypeStruct(GenDb& db) {
     // partition method for parallelism
     decl << "std::vector<range<iterator>> partition() const;\n";
     def << "std::vector<range<iterator>> Type::partition() const {\n";
-    def << "return ind_" << masterIndex << ".getChunks(400);\n";
+    if (eagerEvalPositions.count(masterIndex)) {
+        def << "return make_range(ind_" << masterIndex << ".begin(), "
+            << "ind_" << masterIndex << ".end()).partition();\n";
+    } else {
+        def << "return ind_" << masterIndex << ".getChunks(400);\n";
+    }
     def << "}\n";
 
     // purge method
