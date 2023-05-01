@@ -177,6 +177,12 @@ protected:
         return yes;
     }
 
+    static bool insertsIntoNew(const ram::Operation& stmt) {
+        bool yes = false;
+        visit(stmt, [&](const ram::Insert& insert) { yes |= isPrefix("@new_", insert.getRelation()); });
+        return yes;
+    }
+
     static void getIndexInfo(const ram::Statement* subroutine,
             const ram::analysis::IndexAnalysis& idxAnalysis,
             std::unordered_map<std::string, IndexInfo>& info);

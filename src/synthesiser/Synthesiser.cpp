@@ -785,7 +785,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             assert(rel->getArity() > 0 && "AstToRamTranslator failed/no scans for nullaries");
 
-            bool parallelize = glb.config().has("eager-eval");
+            bool parallelize = glb.config().has("eager-eval") && !insertsIntoNew(scan);
             if (parallelize) {
                 out << "auto part = " << relName << "->partition();\n";
                 out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
@@ -814,7 +814,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             PRINT_BEGIN_COMMENT(out);
 
-            bool parallelize = glb.config().has("eager-eval");
+            bool parallelize = glb.config().has("eager-eval") && !insertsIntoNew(ifexists);
             if (parallelize) {
                 out << "auto part = " << relName << "->partition();\n";
                 out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
@@ -912,7 +912,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 << "lowerUpperRange_" << keys << "(" << rangeBounds.first.str() << ","
                 << rangeBounds.second.str() << "," << ctxName << ");\n";
 
-            bool parallelize = glb.config().has("eager-eval");
+            bool parallelize = glb.config().has("eager-eval") && !insertsIntoNew(iscan);
             if (parallelize) {
                 out << "auto part = range.partition();\n";
                 out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
@@ -1118,7 +1118,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 << "lowerUpperRange_" << keys << "(" << rangeBounds.first.str() << ","
                 << rangeBounds.second.str() << "," << ctxName << ");\n";
 
-            bool parallelize = glb.config().has("eager-eval");
+            bool parallelize = glb.config().has("eager-eval") && !insertsIntoNew(iifexists);
             if (parallelize) {
                 out << "auto part = range.partition();\n";
                 out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
