@@ -785,12 +785,22 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             assert(rel->getArity() > 0 && "AstToRamTranslator failed/no scans for nullaries");
 
-            out << "for(const auto& env" << id << " : "
-                << "*" << relName << ") {\n";
+            bool parallelize = glb.config().has("eager-eval");
+            if (parallelize) {
+                out << "auto part = " << relName << "->partition();\n";
+                out << "oneapi::tbb::parallel_for_each(part.begin(), part.end(), [&](auto it) {";
+                out << "for(const auto& env" << id << ": it) {\n";
+            } else {
+                out << "for(const auto& env" << id << " : "
+                    << "*" << relName << ") {\n";
+            }
 
             visit_(type_identity<TupleOperation>(), scan, out);
 
             out << "}\n";
+            if (parallelize) {
+                out << "});\n";
+            }
 
             PRINT_END_COMMENT(out);
         }
@@ -2703,6 +2713,7 @@ void Synthesiser::generateCode(GenDb& db, const std::string& id, bool& withShare
     if (glb.config().has("eager-eval")) {
         db.addGlobalInclude("<oneapi/tbb/global_control.h>");
         db.addGlobalInclude("<oneapi/tbb/info.h>");
+        db.addGlobalInclude("<oneapi/tbb/parallel_for_each.h>");
         db.addGlobalInclude("<oneapi/tbb/task_group.h>");
     }
 
