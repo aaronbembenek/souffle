@@ -254,6 +254,7 @@ void Synthesiser::emitSubroutineCode(
                 fn.setRetType("void");
                 auto relName = getRelationName(lookup("@delta_" + e.first));
                 auto relType = relationTypes.find(relName)->second;
+                fn.setNextArg("oneapi::tbb::task_group&", "tg");
                 fn.setNextArg(relType + "::t_tuple", "deltaTup");
                 fn.body() << relType << " fakeRel;\n";
                 fn.body() << "auto " << relName << " = &fakeRel;\n";
@@ -261,6 +262,7 @@ void Synthesiser::emitSubroutineCode(
                 emitCode(fn.body(), p.second);
             }
         }
+        out << "oneapi::tbb::task_group tg;\n";
     }
     emitCode(out, stmt);
 }
@@ -479,10 +481,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             // enclose operation in its own scope
             out << "{\n";
 
-            if (glb.config().has("eager-eval")) {
-                out << "oneapi::tbb::task_group tg;\n";
-            }
-
             // check whether loop nest can be parallelized
             bool isParallel = visitExists(
                     *next, [&](const Node& n) { return as<AbstractParallel, AllowCrossCast>(n); });
@@ -525,10 +523,6 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
             if (isParallel && !glb.config().has("eager-eval")) {
                 out << "PARALLEL_END\n";  // end parallel
-            }
-
-            if (glb.config().has("eager-eval")) {
-                out << "tg.wait();\n";
             }
 
             out << "}\n";
@@ -614,7 +608,9 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<Loop>, const Loop& loop, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
-            if (!glb.config().has("eager-eval")) {
+            if (glb.config().has("eager-eval")) {
+                out << "tg.wait();\n";
+            } else {
                 out << "iter = 0;\n";
                 out << "for(;;) {\n";
                 dispatch(loop.getBody(), out);
@@ -1912,7 +1908,7 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 }
                 out << ")) {\n";
                 for (auto p : synthesiser.currentRuleMap[baseName]) {
-                    out << "tg.run([&, tuple] { " << p.first << "(tuple); });\n";
+                    out << "tg.run([&, tuple] { " << p.first << "(tg, tuple); });\n";
                 }
                 out << "}\n";
             } else {
