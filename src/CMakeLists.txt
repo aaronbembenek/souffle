@@ -236,6 +236,10 @@ endif ()
 
 target_compile_options(compiled PUBLIC "")
 
+find_package(TBB REQUIRED)
+target_link_libraries(libsouffle PUBLIC TBB::tbb)
+target_link_libraries(compiled PUBLIC TBB::tbb)
+
 if (Threads_FOUND)
   target_link_libraries(libsouffle PUBLIC Threads::Threads)
   target_link_libraries(compiled PUBLIC Threads::Threads)

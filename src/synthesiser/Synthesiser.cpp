@@ -473,6 +473,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                     out << "if(";
                     dispatch(*toCondition(freeOfCtx), out);
                     out << ") {\n";
+                    if (glb.config().has("record-work")) {
+                        auto num = countExistenceChecks(*toCondition(freeOfCtx));
+                        if (num > 0) {
+                            out << "work.local() += " << num << ";\n";
+                        }
+                    }
                 }
             }
 
@@ -503,6 +509,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                     preamble << "if(";
                     dispatch(*toCondition(requireCtx), preamble);
                     preamble << ") {\n";
+                    if (glb.config().has("record-work")) {
+                        auto num = countExistenceChecks(*toCondition(requireCtx));
+                        if (num > 0) {
+                            out << "work.local() += " << num << ";\n";
+                        }
+                    }
                     dispatch(*next, out);
                     out << "}\n";
                 } else {
@@ -514,6 +526,12 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                     out << "if(";
                     dispatch(*toCondition(requireCtx), out);
                     out << ") {\n";
+                    if (glb.config().has("record-work")) {
+                        auto num = countExistenceChecks(*toCondition(requireCtx));
+                        if (num > 0) {
+                            out << "work.local() += " << num << ";\n";
+                        }
+                    }
                     dispatch(*next, out);
                     out << "}\n";
                 } else {
@@ -763,6 +781,10 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "try{\n";
             out << "for(const auto& env0 : *it) {\n";
 
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
+
             visit_(type_identity<TupleOperation>(), pscan, out);
 
             out << "}\n";
@@ -789,6 +811,10 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             } else {
                 out << "for(const auto& env" << id << " : "
                     << "*" << relName << ") {\n";
+            }
+
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
             }
 
             visit_(type_identity<TupleOperation>(), scan, out);
@@ -819,11 +845,21 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 out << "for(const auto& env" << identifier << " : "
                     << "*" << relName << ") {\n";
             }
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
             out << "if( ";
 
             dispatch(ifexists.getCondition(), out);
 
             out << ") {\n";
+
+            if (glb.config().has("record-work")) {
+                auto num = countExistenceChecks(ifexists.getCondition());
+                if (num > 0) {
+                    out << "work.local() += " << num << ";\n";
+                }
+            }
 
             visit_(type_identity<TupleOperation>(), ifexists, out);
 
@@ -872,11 +908,21 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                    )cpp";
             out << "try{\n";
             out << "for(const auto& env0 : *it) {\n";
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
             out << "if( ";
 
             dispatch(pifexists.getCondition(), out);
 
             out << ") {\n";
+
+            if (glb.config().has("record-work")) {
+                auto num = countExistenceChecks(pifexists.getCondition());
+                if (num > 0) {
+                    out << "work.local() += " << num << ";\n";
+                }
+            }
 
             visit_(type_identity<TupleOperation>(), pifexists, out);
 
@@ -915,6 +961,10 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                 out << "for(const auto& env" << identifier << ": it) {\n";
             } else {
                 out << "for(const auto& env" << identifier << " : range) {\n";
+            }
+
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
             }
 
             visit_(type_identity<TupleOperation>(), iscan, out);
@@ -1086,6 +1136,10 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             out << "try{\n";
             out << "for(const auto& env0 : *it) {\n";
 
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
+
             visit_(type_identity<TupleOperation>(), piscan, out);
 
             out << "}\n";
@@ -1123,11 +1177,21 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
             } else {
                 out << "for(const auto& env" << identifier << " : range) {\n";
             }
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
             out << "if( ";
 
             dispatch(iifexists.getCondition(), out);
 
             out << ") {\n";
+
+            if (glb.config().has("record-work")) {
+                auto num = countExistenceChecks(iifexists.getCondition());
+                if (num > 0) {
+                    out << "work.local() += " << num << ";\n";
+                }
+            }
 
             visit_(type_identity<TupleOperation>(), iifexists, out);
 
@@ -1183,11 +1247,21 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
                    )cpp";
             out << "try{";
             out << "for(const auto& env0 : *it) {\n";
+            if (glb.config().has("record-work")) {
+                out << "work.local()++;\n";
+            }
             out << "if( ";
 
             dispatch(piifexists.getCondition(), out);
 
             out << ") {\n";
+
+            if (glb.config().has("record-work")) {
+                auto num = countExistenceChecks(piifexists.getCondition());
+                if (num > 0) {
+                    out << "work.local() += " << num << ";\n";
+                }
+            }
 
             visit_(type_identity<TupleOperation>(), piifexists, out);
 
@@ -1831,17 +1905,27 @@ void Synthesiser::emitCode(std::ostream& out, const Statement& stmt) {
 
         void visit_(type_identity<Filter>, const Filter& filter, std::ostream& out) override {
             PRINT_BEGIN_COMMENT(out);
+
+            std::string targetRel;
+            visit(filter, [&](const Insert& op) { targetRel = op.getRelation(); });
+            assert(!targetRel.empty());
+
+            auto filtered = filterCondition(filter.getCondition(), baseRelationName(targetRel));
             out << "if( ";
             if (glb.config().has("eager-eval")) {
-                std::string targetRel;
-                visit(filter, [&](const Insert& op) { targetRel = op.getRelation(); });
-                assert(!targetRel.empty());
-                auto filtered = filterCondition(filter.getCondition(), baseRelationName(targetRel));
                 dispatch(*filtered, out);
             } else {
                 dispatch(filter.getCondition(), out);
             }
             out << ") {\n";
+
+            if (glb.config().has("record-work")) {
+                auto num = countExistenceChecks(*filtered);
+                if (num > 0) {
+                    out << "work.local() += " << num << ";\n";
+                }
+            }
+
             visit_(type_identity<NestedOperation>(), filter, out);
             out << "}\n";
             PRINT_END_COMMENT(out);

@@ -653,6 +653,8 @@ std::vector<MainOption> getMainOptions() {
           "binary executable (without executing it)."},
       {"eager-eval", nextOptChar++, "", "", false,
           "Use non-batching evaluation mode (NB: applied only if compiling)."},
+      {"record-work", nextOptChar++, "", "", false,
+           "Record the amount of work performed during evaluation (NB: applied only if compiling)."},
       {"emit-statistics", nextOptChar++, "", "", false,
           "Enable collection of statistics for auto-scheduling"},
       {"fact-dir", 'F', "DIR", ".", false,

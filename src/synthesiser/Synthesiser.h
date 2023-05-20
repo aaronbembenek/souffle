@@ -154,6 +154,12 @@ protected:
 
     static Own<ram::Condition> filterCondition(const ram::Condition& condition, const std::string& targetRel);
 
+    static std::size_t countExistenceChecks(const ram::Condition &condition) {
+        std::size_t num{0};
+        visit(condition, [&](const ram::ExistenceCheck &) { num++; });
+        return num;
+    }
+
     static std::string getInsertRelation(const ram::Statement& stmt) {
         std::string tgt;
         visit(stmt, [&](const ram::Insert& insert) {

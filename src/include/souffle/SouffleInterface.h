@@ -35,8 +35,11 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <oneapi/tbb/combinable.h>
 
 namespace souffle {
+
+inline oneapi::tbb::combinable<unsigned long long> work;
 
 class tuple;
 
