@@ -314,6 +314,8 @@ std::unique_ptr<SipsMetric> SipsMetric::create(const std::string& heuristic, con
     } else if (tu.global().config().has("auto-schedule")) {
         return mk<SelingerProfileSipsMetric>(tu);
     }
+    else if (heuristic == "delta")
+        return mk<DeltaSips>(tu);
     else if (heuristic == "strict")
         return mk<StrictSips>(tu);
     else if (heuristic == "all-bound")
