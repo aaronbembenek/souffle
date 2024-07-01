@@ -2760,10 +2760,26 @@ void Synthesiser::getIndexInfo(const Statement* subroutine, const ram::analysis:
                 info[op.getRelation()].master = true;
             }
         });
-        // FIXME We need to also check the conditions of IfExists and IndexIfExists
         visit(query, [&](const IfExists& op) {
+            auto& cond = op.getCondition();
+            visit(cond, [&](const ram::ExistenceCheck& ex) {
+                if (preds.count(ex.getRelation())) {
+                    info[ex.getRelation()].master = true;
+                }
+            });
             if (preds.count(op.getRelation())) {
                 info[op.getRelation()].master = true;
+            }
+        });
+        visit(query, [&](const IndexIfExists& op) {
+            auto& cond = op.getCondition();
+            visit(cond, [&](const ram::ExistenceCheck& ex) {
+                if (preds.count(ex.getRelation())) {
+                    info[ex.getRelation()].master = true;
+                }
+            });
+            if (preds.count(op.getRelation())) {
+                info[op.getRelation()].searches.emplace(idxAnalysis.getSearchSignature(&op));
             }
         });
         visit(query, [&](const IndexOperation& op) {
