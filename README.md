@@ -36,6 +36,7 @@ Most changes happen because we need to change the way parallelism is implemented
 Our extension to Soufflé supports eager evaluation only when a Soufflé program is compiled; it does not support eager evaluation for interpretation.
 
 While our eager evaluation extension is general enough to support large and varied Soufflé programs, it does not yet support all RAM instructions; trying to codegen unsupported instructions should result in an assertion failure.
+The main instructions we do not support involve aggregation; supporting such instructions in the future should be possible.
 Additionally, we have not tried to integrate the code for eager evaluation with ancillary Soufflé modes, such as provenance tracking or performance profiling.
 
 ---
